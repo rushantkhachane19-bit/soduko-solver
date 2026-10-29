@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sudoku Solver & Analyzer</title><link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <header><div class="brand"><span class="logo">S</span><span>Sudoku <b>Solver</b></span></div><span class="backend-tag"><i></i> C++ BACKTRACKING</span></header>
+  <main>
+    <section class="title-row"><div><p class="eyebrow">DAA MINI PROJECT</p><h1>Sudoku Solver <span>& Analyzer</span></h1></div><p class="intro">Choose a puzzle or enter your own. Solve it and inspect the algorithm's performance.</p></section>
+    <section class="layout">
+      <div class="panel puzzle-panel">
+        <div class="panel-head"><div><small>PUZZLE WORKSPACE</small><h2>Your Sudoku</h2></div><span id="boardBadge" class="badge">Ready</span></div>
+        <div class="controls">
+          <label>Grid size<select id="sizeSelect"><option value="4">4 × 4</option><option value="6">6 × 6</option><option value="9" selected>9 × 9</option><option value="16">16 × 16</option></select></label>
+          <label>Difficulty<select id="difficultySelect"><option>Easy</option><option>Medium</option><option>Hard</option><option>Custom</option></select></label>
+          <label id="puzzleLabel">Puzzle<select id="puzzleSelect"></select></label>
+        </div>
+        <div id="board" class="board" aria-label="Sudoku board"></div>
+        <div class="hint">For 16×16: use <b>1–9</b> and <b>A–G</b>. Use <b>0</b> or leave a cell blank for an empty cell.</div>
+        <div class="actions"><button id="solveBtn" class="primary">Solve & Analyze</button><button id="loadBtn" class="secondary">Load Puzzle</button><button id="clearBtn" class="quiet">Clear Board</button></div>
+        <div id="message" class="message" role="status">Choose a puzzle, or select Custom to enter your own.</div>
+      </div>
+      <aside class="panel analysis-panel">
+        <div class="panel-head"><div><small>RESULTS</small><h2>Analysis report</h2></div><span class="report-mark">↗</span></div>
+        <div id="solutionState" class="solution-state"><span class="state-icon">◎</span><div><b>Waiting for puzzle</b><small>Results appear here after analysis.</small></div></div>
+        <div class="stats">
+          <div class="stat"><span>Recursive calls</span><b id="recursiveCalls">—</b></div>
+          <div class="stat"><span>Placements tried</span><b id="placements">—</b></div>
+          <div class="stat"><span>Backtracks</span><b id="backtracks">—</b></div>
+          <div class="stat"><span>Execution time</span><b id="elapsed">—</b></div>
+        </div>
+        <div class="algorithm-note"><small>ALGORITHM</small><b>Recursive Backtracking</b><p>Try a valid value, recurse, and undo the choice if the branch fails. The solver stops counting after two solutions to detect non-unique puzzles.</p></div>
+      </aside>
+    </section>
+  </main>
+  <footer><span>Sudoku Solver & Puzzle Analyzer</span><span>HTML · CSS · JavaScript · C++</span></footer>
+</div>
+<script src="script.js"></script>
+</body></html>

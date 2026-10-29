@@ -151,7 +151,7 @@ async function solve(){
   solveBtn.disabled=true;solveBtn.textContent='Analyzing…';setMessage('Sending puzzle to the C++ solver…');
   try{
     const board=current.map(row=>row.map(v=>v?symbolFor(v):'0'));
-    const res=await fetch('/api/solve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({size:currentSize,boxRows,boxCols,board})});
+    const res = await fetch('https://soduko-solver-e96i.onrender.com/api/solve', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({size:currentSize,boxRows,boxCols,board})});
     const data=await res.json();
     if(!data.ok){setMessage(data.message||'Could not process the puzzle.',true);badgeEl.textContent='Input error';return;}
     showStats(data);
@@ -161,7 +161,7 @@ async function solve(){
       showStats(data);badgeEl.textContent='Solved';
       setMessage(data.message+(data.status==='multiple'?' Showing one valid solution.':''));
     }else{badgeEl.textContent='Unsolvable';setMessage(data.message,true);}
-  }catch(e){badgeEl.textContent='Backend offline';setMessage('Cannot connect to C++ backend. Run run.bat and open http://127.0.0.1:8080. '+e.message,true);}
+   }catch(e){badgeEl.textContent='Backend offline';setMessage('Cannot connect to the online solver. Please try again shortly. '+e.message,true);}
   finally{solveBtn.disabled=false;solveBtn.textContent='Solve & Analyze';}
 }
 sizeSelect.addEventListener('change',updateSize);

@@ -1,6 +1,11 @@
-#define _WINSOCK_DEPRECATED_NO_WARNINGS
-#include <winsock2.h>
-#include <ws2tcpip.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <cerrno>
+#include <cstring>
+#include <cstdint>
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -11,7 +16,6 @@
 #include <cctype>
 #include <cstdlib>
 
-#pragma comment(lib, "Ws2_32.lib")
 using namespace std;
 
 struct Puzzle {
@@ -227,39 +231,132 @@ string analyze(const string& body) {
        <<",\"backtracks\":"<<st.backtracks<<",\"elapsedMs\":"<<st.elapsedMs<<"}}";
     return out.str();
 }
-void sendResponse(SOCKET client,int code,const string& status,const string& type,const string& body) {
-    ostringstream h; h<<"HTTP/1.1 "<<code<<" "<<status<<"\r\nContent-Type: "<<type
-      <<"\r\nContent-Length: "<<body.size()<<"\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\nConnection: close\r\n\r\n"<<body;
-    string d=h.str(); send(client,d.c_str(),(int)d.size(),0);
-}
-void handleClient(SOCKET client) {
-    string req; char buf[8192]; int n;
-    while((n=recv(client,buf,sizeof(buf),0))>0) {
-        req.append(buf,n); size_t he=req.find("\r\n\r\n");
-        if(he!=string::npos) {
-            size_t cl=req.find("Content-Length:"); size_t len=0;
-            if(cl!=string::npos&&cl<he) { cl+=15; while(cl<he&&req[cl]==' ')cl++; size_t le=req.find("\r\n",cl); try{len=stoul(req.substr(cl,le-cl));}catch(...){} }
-            if(req.size()>=he+4+len) break;
-        }
-        if(req.size()>3*1024*1024)break;
+
+void sendResponse(int client, int code, const string& status, const string& type, const string& body) {
+    ostringstream h;
+    h << "HTTP/1.1 " << code << " " << status
+      << "\r\nContent-Type: " << type
+      << "\r\nContent-Length: " << body.size()
+      << "\r\nAccess-Control-Allow-Origin: *"
+      << "\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS"
+      << "\r\nAccess-Control-Allow-Headers: Content-Type"
+      << "\r\nConnection: close\r\n\r\n" << body;
+    string data = h.str();
+    size_t sent = 0;
+    while (sent < data.size()) {
+        ssize_t n = send(client, data.data() + sent, data.size() - sent, 0);
+        if (n <= 0) break;
+        sent += static_cast<size_t>(n);
     }
-    size_t le=req.find("\r\n"); if(le==string::npos){sendResponse(client,400,"Bad Request","text/plain","Bad request");return;}
-    istringstream line(req.substr(0,le)); string method,path,ver; line>>method>>path>>ver;
-    if(method=="OPTIONS"){sendResponse(client,204,"No Content","text/plain","");return;}
-    if(method=="POST"&&path=="/api/solve"){size_t split=req.find("\r\n\r\n");sendResponse(client,200,"OK","application/json; charset=utf-8",analyze(split==string::npos?"":req.substr(split+4)));return;}
-    if(method!="GET"){sendResponse(client,405,"Method Not Allowed","text/plain","Method not allowed");return;}
-    if(path=="/")path="/index.html";
-    if(path.find("..")!=string::npos){sendResponse(client,403,"Forbidden","text/plain","Forbidden");return;}
-    string fp="frontend"+path, content=readFile(fp);
-    if(content.empty()){sendResponse(client,404,"Not Found","text/plain","File not found: "+path);return;}
-    sendResponse(client,200,"OK",mimeType(fp),content);
 }
-int main(){
-    WSADATA wsa; if(WSAStartup(MAKEWORD(2,2),&wsa)!=0){cerr<<"Winsock initialization failed.\n";return 1;}
-    SOCKET server=socket(AF_INET,SOCK_STREAM,IPPROTO_TCP); if(server==INVALID_SOCKET){cerr<<"Socket creation failed.\n";WSACleanup();return 1;}
-    sockaddr_in a{};a.sin_family=AF_INET;a.sin_addr.s_addr=inet_addr("127.0.0.1");a.sin_port=htons(8080);
-    if(bind(server,(sockaddr*)&a,sizeof(a))==SOCKET_ERROR){cerr<<"Port 8080 is busy. Close the other app using it.\n";closesocket(server);WSACleanup();return 1;}
-    listen(server,SOMAXCONN);cout<<"Sudoku Solver is running at http://127.0.0.1:8080\nKeep this window open. Ctrl+C to stop.\n";
-    while(true){SOCKET client=accept(server,nullptr,nullptr);if(client==INVALID_SOCKET)continue;handleClient(client);shutdown(client,SD_SEND);closesocket(client);}
-    closesocket(server);WSACleanup();return 0;
+
+void handleClient(int client) {
+    string req;
+    char buf[8192];
+    size_t headerEnd = string::npos;
+    size_t contentLength = 0;
+
+    while (req.size() <= 3 * 1024 * 1024) {
+        ssize_t n = recv(client, buf, sizeof(buf), 0);
+        if (n <= 0) break;
+        req.append(buf, static_cast<size_t>(n));
+
+        headerEnd = req.find("\r\n\r\n");
+        if (headerEnd != string::npos) {
+            size_t cl = req.find("Content-Length:");
+            if (cl != string::npos && cl < headerEnd) {
+                cl += 15;
+                while (cl < headerEnd && req[cl] == ' ') ++cl;
+                size_t lineEnd = req.find("\r\n", cl);
+                try {
+                    contentLength = stoul(req.substr(cl, lineEnd - cl));
+                } catch (...) {
+                    contentLength = 0;
+                }
+            }
+            if (req.size() >= headerEnd + 4 + contentLength) break;
+        }
+    }
+
+    size_t lineEnd = req.find("\r\n");
+    if (lineEnd == string::npos) {
+        sendResponse(client, 400, "Bad Request", "text/plain; charset=utf-8", "Bad request");
+        return;
+    }
+
+    istringstream line(req.substr(0, lineEnd));
+    string method, path, version;
+    line >> method >> path >> version;
+
+    if (method == "OPTIONS") {
+        sendResponse(client, 204, "No Content", "text/plain; charset=utf-8", "");
+        return;
+    }
+
+    if (method == "GET" && (path == "/" || path == "/health")) {
+        sendResponse(client, 200, "OK", "application/json; charset=utf-8",
+                     "{\"ok\":true,\"message\":\"Sudoku Solver API is running.\"}");
+        return;
+    }
+
+    if (method == "POST" && path == "/api/solve") {
+        size_t split = req.find("\r\n\r\n");
+        string body = split == string::npos ? "" : req.substr(split + 4);
+        sendResponse(client, 200, "OK", "application/json; charset=utf-8", analyze(body));
+        return;
+    }
+
+    sendResponse(client, 404, "Not Found", "application/json; charset=utf-8",
+                 "{\"ok\":false,\"message\":\"Route not found.\"}");
 }
+
+int main() {
+    const char* portEnv = getenv("PORT");
+    int port = 10000;
+    if (portEnv && *portEnv) {
+        try { port = stoi(portEnv); } catch (...) {}
+    }
+
+    int server = socket(AF_INET, SOCK_STREAM, 0);
+    if (server < 0) {
+        cerr << "Socket creation failed: " << strerror(errno) << "\n";
+        return 1;
+    }
+
+    int opt = 1;
+    setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+    sockaddr_in address{};
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = htonl(INADDR_ANY);
+    address.sin_port = htons(static_cast<uint16_t>(port));
+
+    if (bind(server, reinterpret_cast<sockaddr*>(&address), sizeof(address)) < 0) {
+        cerr << "Bind failed on port " << port << ": " << strerror(errno) << "\n";
+        close(server);
+        return 1;
+    }
+
+    if (listen(server, SOMAXCONN) < 0) {
+        cerr << "Listen failed: " << strerror(errno) << "\n";
+        close(server);
+        return 1;
+    }
+
+    cout << "Sudoku Solver API listening on port " << port << "\n";
+    while (true) {
+        int client = accept(server, nullptr, nullptr);
+        if (client < 0) {
+            if (errno == EINTR) continue;
+            cerr << "Accept failed: " << strerror(errno) << "\n";
+            continue;
+        }
+        handleClient(client);
+        shutdown(client, SHUT_WR);
+        close(client);
+    }
+
+    close(server);
+    return 0;
+}
+
